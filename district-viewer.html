@@ -1,0 +1,144 @@
+<link rel="import" href='https://rawgit.com/Download/polymer-cdn/master/lib/polymer/polymer.html'>
+<link rel="import" href='https://rawgit.com/Download/polymer-cdn/master/lib/paper-slider/paper-slider.html'>
+<dom-module id="district-viewer">
+  <template>
+    <style>
+
+	   .map-layer {
+		  fill: #fff;
+		  stroke: #aaa;
+		}
+
+		.effect-layer{
+		  pointer-events:none;
+		}
+      .background {
+		fill: #eee;
+  		pointer-events: all;
+	  }
+	  .container{
+		border: 1px solid black;
+	  }
+	  #slider{
+	  	width:100%;
+	  }
+	  :host {
+        display: inline-block;
+      }
+    </style>
+    <!-- local DOM goes here -->
+    <svg id='map'></svg>
+	<paper-slider id='slider' step=2 min={{minval}} max={{maxval}} immediate-value={{val}}></paper-slider>
+	<span>{{val}}</span>
+	<p>winner: <span>{{winner}}</span></p>
+	<p>dem vote share: <span>{{voteshare}}</span></p>
+	<p>turnout: <span>{{turnout}}</span></p>
+	<p>margin: <span>{{victorymargin}}</span></p>
+  </template>
+  <script>
+	Polymer({
+	/* this is the element's prototype */
+		is: 'district-viewer',
+		properties:{
+			val: {
+				type: 'number',
+				value: 2000,
+				observer: 'updateGeo'
+			},
+			maxval:2014,
+			minval:1950,
+		    state : 'North Carolina',
+			district: 12,
+			voteshare: 0,
+			winner: '',
+			turnout: 0,
+			victorymargin: 0
+		},	
+		ready:function(){
+
+			this.url = 'https://stuartlynn.carto.com/api/v2/sql?filename=levi_districts_since_1948&q=SELECT+ST_SIMPLIFY(the_geom, 0.001)as the_geom, lewis_dist district, turnout, vote_share, victory_margin, winner, year+FROM+stuartlynn.levi_districts_since_1948+%0D%0Awhere+state_name+%3D+%27north carolina%27%0D%0A%0D%0A&api_key=cbbc4efb5201efb60996d645f264ef4e7b14495b&format=geojson'
+
+			this.width = 960;	
+			this.height= 500;
+			this.color = d3.scale.linear()
+					   .domain([1, 20])
+  					   .clamp(true)
+  					   .range(['#fff', '#409A99']);
+
+			this.svg = d3.select(this.$.map)
+					    .attr('width', this.width)
+					    .attr('height', this.height);
+			 
+			this.svg.append('rect')
+			  .attr('fill', '#eee')
+			  .attr('width', this.width)
+			  .attr('height', this.height);
+
+			this.projection = d3.geo.mercator()
+  							  .scale(4000)
+ 							  .center([-79.89096094,35.2112405])
+  							  .translate([this.width / 2, this.height / 2]);
+			
+			this.g = this.svg.append('g');
+
+			this.effectLayer = this.g.append('g')
+			  .classed('effect-layer', true);
+
+			this.mapLayer = this.g.append('g')
+			  .classed('map-layer', true)
+			  .attr('fill', '#fff')
+			  .attr('stroke', '#aaa');	
+			this.path = d3.geo.path()
+  						 .projection(this.projection);
+
+			d3.json(this.url, function(error, mapData) {
+			  this.features = mapData.features;
+			  //console.log(this.features)
+              this.min_congres = Math.min.apply(null,this.features.map(function(a){ return a.properties.year})); 
+              this.max_congres = Math.max.apply(null,this.features.map(function(a){ return a.properties.year})); 
+			  
+			  //console.log(this.min_congres, this.max_congres);
+
+			  this.maxval = this.max_congres;
+			  this.minval = this.min_congres;
+
+
+			  
+			  this.val = this.min_congres;
+
+			  //console.log(this.min_congres, this.max_congres); 	
+			  // Update color scale domain based on data
+			  this.color.domain([0, this.features.length]);
+			  this.updateGeo();			  
+
+			}.bind(this));
+
+			
+		},
+		updateGeo: function(){
+			if(!this.features){
+				return;
+			}
+			var filteredFeatures = this.features.filter(function(a){return a.properties.year == this.val}.bind(this)) 
+
+			var dist = filteredFeatures.filter(function(a){return a.properties.district == this.district}.bind(this))[0];
+			if(dist){
+				this.turnout = dist.properties.turnout
+				this.voteshare = dist.properties.voter_share
+				this.winner  =  dist.properties.winner
+				this.victorymargin = dist.properties.victory_margin
+			}
+			//console.log(filteredFeatures.length);
+			//console.log(this.mapLayer)
+			this.mapLayer.selectAll('path').remove()
+
+			this.mapLayer.selectAll('path')
+				.data(filteredFeatures)
+				.enter().append('path')
+				  .attr('d', this.path)
+				  .attr('vector-effect', 'non-scaling-stroke')
+				  .style('fill', function(d){return d.properties.district == this.district ? '#ff0000' : '#FFFFFF' }.bind(this))
+		}
+	});
+  </script>
+</dom-module>
