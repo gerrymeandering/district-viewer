@@ -60,8 +60,13 @@
 
 			this.width = 960;	
 			this.height= 500;
-			this.color = d3.scale.linear()
-					   .domain([1, 20])
+            this.turnoutRamp=d3.scale.linear()
+                                .domain([0,700000])
+                                .clamp(true)
+                                .range([0,1])
+
+			this.demRamp = d3.scale.linear()
+					   .domain([0, 1])
   					   .clamp(true)
   					   .range(['#fff', '#409A99']);
 
@@ -102,19 +107,27 @@
 			  this.maxval = this.max_congres;
 			  this.minval = this.min_congres;
 
-
-			  
 			  this.val = this.min_congres;
 
 			  //console.log(this.min_congres, this.max_congres); 	
 			  // Update color scale domain based on data
-			  this.color.domain([0, this.features.length]);
 			  this.updateGeo();			  
 
 			}.bind(this));
 
 			
 		},
+        opacityFunc: function(d){
+            return this.turnoutRamp(d.properties.turnout)
+        },
+        colorFunc: function(d){
+            if(d.properties.winner=='Democrat'){
+                return '#446093';
+            }
+            else{
+                return '#bc3939';
+            }
+        },
 		updateGeo: function(){
 			if(!this.features){
 				return;
@@ -137,7 +150,9 @@
 				.enter().append('path')
 				  .attr('d', this.path)
 				  .attr('vector-effect', 'non-scaling-stroke')
-				  .style('fill', function(d){return d.properties.district == this.district ? '#ff0000' : '#FFFFFF' }.bind(this))
+				  .style('stroke', function(d){return d.properties.district == this.district ? '#00000' : '#FFFFFF' }.bind(this))
+                  .style('fill', function(d){return this.colorFunc(d)}.bind(this))
+                  .style('opacity', function(d){return this.opacityFunc(d)}.bind(this));
 		}
 	});
   </script>
