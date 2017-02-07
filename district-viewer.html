@@ -22,18 +22,33 @@
 	  #slider{
 	  	width:100%;
 	  }
+      #stats{
+        width: 100%;
+      }
+      #stats p {
+          font-weight:bold;
+          display: inline-block;
+          margin-right: 5px;
+      }
+      #stats p span{
+          font-weight:normal;
+      }
 	  :host {
         display: inline-block;
       }
+
     </style>
     <!-- local DOM goes here -->
     <svg id='map'></svg>
 	<paper-slider id='slider' step=2 min={{minval}} max={{maxval}} immediate-value={{val}}></paper-slider>
-	<span>{{val}}</span>
-	<p>winner: <span>{{winner}}</span></p>
-	<p>dem vote share: <span>{{voteshare}}</span></p>
-	<p>turnout: <span>{{turnout}}</span></p>
-	<p>margin: <span>{{victorymargin}}</span></p>
+    <div id='stats'>
+        <p>District: <span>{{district}}</span>
+        <p>Year: <span>{{val}}</span>
+        <p>Winner: <span>{{winner}}</span></p>
+        <p>Dem vote share: <span>{{voteshare}}</span></p>
+        <p>Turnout: <span>{{turnout}}</span></p>
+        <p>Margin: <span>{{victorymargin}}</span></p>
+    </div>
   </template>
   <script>
 	Polymer({
@@ -48,7 +63,11 @@
 			maxval:2014,
 			minval:1950,
 		    state : 'North Carolina',
-			district: 12,
+            district:{
+                type: 'number',
+                value: 12,
+                observer: 'updateGeo'
+            },
 			voteshare: 0,
 			winner: '',
 			turnout: 0,
@@ -63,7 +82,7 @@
             this.turnoutRamp=d3.scale.linear()
                                 .domain([0,700000])
                                 .clamp(true)
-                                .range([0,1])
+                                .range([0.3,1])
 
 			this.demRamp = d3.scale.linear()
 					   .domain([0, 1])
@@ -137,22 +156,32 @@
 			var dist = filteredFeatures.filter(function(a){return a.properties.district == this.district}.bind(this))[0];
 			if(dist){
 				this.turnout = dist.properties.turnout
-				this.voteshare = dist.properties.voter_share
+				this.voteshare = dist.properties.vote_share
 				this.winner  =  dist.properties.winner
 				this.victorymargin = dist.properties.victory_margin
 			}
 			//console.log(filteredFeatures.length);
 			//console.log(this.mapLayer)
 			this.mapLayer.selectAll('path').remove()
+            
+            //Move selected region to top:
 
 			this.mapLayer.selectAll('path')
-				.data(filteredFeatures)
+				.data(filteredFeatures
+                .sort(function(a,b){ console.log(a); return (a.properties.district == this.district ? 1 : -1)}.bind(this)))
 				.enter().append('path')
 				  .attr('d', this.path)
 				  .attr('vector-effect', 'non-scaling-stroke')
-				  .style('stroke', function(d){return d.properties.district == this.district ? '#00000' : '#FFFFFF' }.bind(this))
+                  .style('stroke-width', '1')
+                  .style('stroke-opacity', '1.0')
+				  .style('stroke', function(d){return d.properties.district == this.district ? 'black' : '#C8C8C8' }.bind(this))
                   .style('fill', function(d){return this.colorFunc(d)}.bind(this))
-                  .style('opacity', function(d){return this.opacityFunc(d)}.bind(this));
+                  .style('fill-opacity', function(d){return this.opacityFunc(d)}.bind(this));
+            this.mapLayer.selectAll('path')
+                  .on('click', function(a){
+                      console.log('clicked :',a)
+                      this.district= a.properties.district
+                    }.bind(this))
 		}
 	});
   </script>
