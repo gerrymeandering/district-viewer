@@ -151,8 +151,11 @@
                     })
                 
 
+                max_state = d3.max(stateLevel,function(a){return a.mean+a.std})
+                min_state = d3.min(stateLevel,function(a){return a.mean-a.std})
+                range_district = d3.extent(districtData,function(a){return a.properties[this.metric]}.bind(this))
                 this.yearScale.domain(d3.extent(districtData,function(a){return a.properties.year}));
-                this.valScale.domain(d3.extent(districtData,function(a){return a.properties[this.metric]}.bind(this)));
+                this.valScale.domain([Math.min(range_district[0], min_state),Math.max(range_district[1],max_state)]);
                
                 this.xAxis.call(d3.axisBottom(this.yearScale))
                 this.yAxis.call(d3.axisLeft(this.valScale))
