@@ -1,0 +1,173 @@
+<link rel="import" href='https://rawgit.com/Download/polymer-cdn/master/lib/polymer/polymer.html'>
+<link rel="import" href='https://rawgit.com/Download/polymer-cdn/master/lib/paper-dropdown-menu/paper-dropdown-menu.html'>
+<link rel="import" href='https://rawgit.com/Download/polymer-cdn/master/lib/paper-item/paper-item.html'>
+<link rel="import" href='https://rawgit.com/Download/polymer-cdn/master/lib/paper-listbox/paper-listbox.html'>
+<script src="https://unpkg.com/topojson-server@2"></script> 
+<dom-module id="score-chart">
+  <template>
+    <style>
+          #container{
+            width:100%;
+            height:100%;
+            border:1px solid black;
+          }
+          :host{
+            box-model: border-box;
+            padding: 20px
+          }
+    </style>
+    <div id='state_selector'>
+		<paper-dropdown-menu label="Metrics"  >
+	  		<paper-listbox class="dropdown-content" selected="{{metric}}" attr-for-selected='id' >
+				<template is="dom-repeat" items="{{metrics}}">
+					<paper-item id={{item}}><span>{{item}}</span></paper-item>
+    			</template>
+	  		</paper-listbox>
+		</paper-dropdown-menu>
+
+    </div>
+    <svg id='chart' width={{width}} height={{height}}></svg>
+
+
+  </template>
+    <script>
+        Polymer({
+	    /* this is the element's prototype */
+		    is: 'score-chart',
+		    properties:{
+                year :{
+                    type: 'number',
+                    value: 1960,
+                    observer: 'updateYear'
+                },
+                width: 960,
+                height: 250,
+                metrics:{
+    type: 'array',
+                    value: ["polsbypopper", 
+                            "convexhull", 
+                            "schwartzberg", 
+                            "reock", 
+                            "flahertycrumplin", 
+                            "eigseitzinger"]
+                },
+                data: { 
+                    type: 'object',
+                    value: [],
+                    observer: 'updateChart'
+                },
+                stateName:{
+                    type: 'string',
+                    value: '',
+                    observer: 'updateChart'
+                },
+                district:{
+                    type: 'string',
+                    value: '',
+                    observer: 'updateChart'
+                },
+                metric:{
+                    type: 'string',
+                    value: 'polsbypopper',
+                    observer: 'updateChart'
+                },
+                time:{
+                    type: 'number',
+                    value: 0 
+                }
+            },
+            ready: function(){
+                margin = {top:20, right:20,bottom:30,left:50}
+                
+                figWidth = 960 - margin.left - margin.right
+                figHeight= 250 - margin.top - margin.bottom
+			    
+                this.svg = d3.select(this.$.chart)
+                             .attr('width', 960)
+                             .attr('height', 290)
+                
+                this.yearScale = d3.scaleLinear().range([0,figWidth])
+                                   .domain(d3.extent([1960,2014]))
+                this.valScale  = d3.scaleLinear()
+                                   .range([figHeight,0])
+                                   .domain([0,1])
+                
+
+                this.g = this.svg.append("g")
+                                 .attr("transform", "translate("+margin.left+","+margin.top+")");
+
+                this.xAxis = this.g.append("g")
+                    .attr('class', "axis axis--x")
+                    .attr("transform","translate(0,"+figHeight+")")
+                    .call(d3.axisBottom(this.yearScale))
+
+                this.yAxis = this.g.append("g")
+                     .attr('class', 'axis axis--y')
+                     .call(d3.axisLeft(this.valScale))
+
+                this.yearBar = this.g.append("line")
+                     .attr('class', 'year')
+                     .style('stroke-width', 2)
+                     .style("stroke", "red")
+                     .style("fill", "none")
+                     .attr("y1",0)
+                     .attr("y2",figHeight)
+
+            },
+            stateLevel:function(){
+                stateData = this.data.filter(function(a){return  a.state_name==this.state});
+                stateMean = d3.mean(stateData, function(a){return a[this.currentMetric]});
+                stateDeviation = d3.mean(stateData, function(a){return a[this.currentMetric]});
+                
+
+            },
+            updateYear: function(){
+                if(this.yearBar){
+                    this.yearBar.attr("x1", this.yearScale(this.year))
+                    .attr("x2", this.yearScale(this.year))
+                }
+            },
+            updateChart: function(){
+                if(!(this.svg)){
+                    return
+                }
+
+
+
+                var districtData = this.data.filter(
+                    function(a){ 
+                        return a.properties.district==this.district
+                    }.bind(this))
+                    .sort(function(a,b){
+                        return a.properties.year - b.properties.year
+                    })
+                
+
+                this.yearScale.domain(d3.extent(districtData,function(a){return a.properties.year}));
+                this.valScale.domain(d3.extent(districtData,function(a){return a.properties[this.metric]}.bind(this)));
+               
+                this.xAxis.call(d3.axisBottom(this.yearScale))
+                this.yAxis.call(d3.axisLeft(this.valScale))
+                
+                this.line = d3.line()
+                              .curve(d3.curveBasis)
+                              .x(function(d){return this.yearScale(d.properties.year)}.bind(this))
+                              .y(function(d){return this.valScale(d.properties[this.metric])}.bind(this))
+
+                this.g.selectAll(".districtLine").remove()
+                this.g.append("path")
+                    .attr('class','districtLine')
+                    .datum(districtData)
+                    .attr("d", function(d){  return this.line(d) }.bind(this))
+                    .style("stroke", "red")
+                    .style("fill", "transparent")
+            //    this.metrics.forEach(metric,index){
+            //        this.line = d3.line()
+            //                  .curve(d3.curveBasis)
+            //                  .x(function(d){return this.timeScale(d.time) }.bind(this))
+             //                 .y(function(d,index){return this.data
+            //}
+            }
+        })
+    </script>
+</dom-module>

@@ -1,5 +1,12 @@
 <link rel="import" href='https://rawgit.com/Download/polymer-cdn/master/lib/polymer/polymer.html'>
 <link rel="import" href='https://rawgit.com/Download/polymer-cdn/master/lib/paper-slider/paper-slider.html'>
+<link rel="import" href='https://rawgit.com/Download/polymer-cdn/master/lib/paper-checkbox/paper-checkbox.html'>
+<link rel="import" href='https://rawgit.com/Download/polymer-cdn/master/lib/paper-dropdown-menu/paper-dropdown-menu.html'>
+<link rel="import" href='https://rawgit.com/Download/polymer-cdn/master/lib/paper-item/paper-item.html'>
+<link rel="import" href='https://rawgit.com/Download/polymer-cdn/master/lib/paper-listbox/paper-listbox.html'>
+<link rel="import" href='./score-chart.html'>
+
+<script src="https://unpkg.com/topojson-server@2"></script> 
 <dom-module id="district-viewer">
   <template>
     <style>
@@ -8,7 +15,7 @@
 		  fill: #fff;
 		  stroke: #aaa;
 		}
-
+        
 		.effect-layer{
 		  pointer-events:none;
 		}
@@ -39,8 +46,16 @@
 
     </style>
     <!-- local DOM goes here -->
-    <svg id='map'></svg>
-	<paper-slider id='slider' step=2 min={{minval}} max={{maxval}} immediate-value={{val}}></paper-slider>
+    <div id='state_selector'>
+		<paper-dropdown-menu label="States"  >
+	  		<paper-listbox class="dropdown-content" selected="{{stateName}}" attr-for-selected='id' >
+				<template is="dom-repeat" items="{{states}}">
+					<paper-item id={{item}}><span>{{item}}</span></paper-item>
+    			</template>
+	  		</paper-listbox>
+		</paper-dropdown-menu>
+
+    </div>
     <div id='stats'>
         <p>District: <span>{{district}}</span>
         <p>Year: <span>{{val}}</span>
@@ -48,7 +63,14 @@
         <p>Dem vote share: <span>{{voteshare}}</span></p>
         <p>Turnout: <span>{{turnout}}</span></p>
         <p>Margin: <span>{{victorymargin}}</span></p>
+        <p><paper-checkbox checked={{zoomToDistrict}}>Zoom To District</paper-checkbox> </p>
     </div>
+
+    <svg id='map'></svg>
+	<paper-slider id='slider' step=2 min={{minval}} max={{maxval}} immediate-value={{val}}></paper-slider>
+
+	<score-chart year="{{val}}" data="{{features}}" state-name='{{stateName}}' district='{{district}}'></score-chart>
+
   </template>
   <script>
 	Polymer({
@@ -62,10 +84,27 @@
 			},
 			maxval:2014,
 			minval:1950,
-		    state : 'North Carolina',
+			features : {
+				value: [],
+				type: 'array'
+			},
+            stateName : {
+                value:'North Carolina',
+                type: 'string',
+                observer: 'setUpMap'
+            },
+            states: {
+                type: 'array',
+                value: []
+            },
             district:{
                 type: 'number',
                 value: 12,
+                observer: 'updateGeo'
+            },
+            zoomToDistrict:{
+                type: 'boolean',
+                value: false,
                 observer: 'updateGeo'
             },
 			voteshare: 0,
@@ -74,17 +113,32 @@
 			victorymargin: 0
 		},	
 		ready:function(){
+            this.getStateList();
+		    this.setUpMap();	
+		},
+        getStateList:function(){
+            d3.csv('https://stuartlynn.carto.com/api/v2/sql?q=select distinct(state_name) as state from levi_districts_since_1948&format=csv',function(result){
+                this.states = result.map(function(a){ return a.state});
 
-			this.url = 'https://stuartlynn.carto.com/api/v2/sql?filename=levi_districts_since_1948&q=SELECT+ST_SIMPLIFY(the_geom, 0.001)as the_geom, lewis_dist district, turnout, vote_share, victory_margin, winner, year+FROM+stuartlynn.levi_districts_since_1948+%0D%0Awhere+state_name+%3D+%27north carolina%27%0D%0A%0D%0A&api_key=cbbc4efb5201efb60996d645f264ef4e7b14495b&format=geojson'
+                this.setUpMap()
+            }.bind(this))
+        },
+        setUpMap:function(){
+
+			this.url = 'https://stuartlynn.carto.com/api/v2/sql?filename=levi_districts_since_1948&q=SELECT+ST_MAKEVALID(ST_SIMPLIFY(the_geom, 0.001)) as the_geom, lewis_dist district, turnout, vote_share, victory_margin, winner, year,polsbypopper, convexhull, schwartzberg, reock, flahertycrumplin, eigseitzinger +FROM+stuartlynn.levi_districts_since_1948+%0D%0Awhere+state_name+%3D+%27'+this.stateName.toLowerCase()+'%27%0D%0A%0D%0A&api_key=cbbc4efb5201efb60996d645f264ef4e7b14495b&format=geojson'
+
+            d3.select(this.$.map)
+              .selectAll('*').remove()
+
 
 			this.width = 960;	
 			this.height= 500;
-            this.turnoutRamp=d3.scale.linear()
+            this.turnoutRamp=d3.scaleLinear()
                                 .domain([0,700000])
                                 .clamp(true)
                                 .range([0.3,1])
 
-			this.demRamp = d3.scale.linear()
+			this.demRamp = d3.scaleLinear()
 					   .domain([0, 1])
   					   .clamp(true)
   					   .range(['#fff', '#409A99']);
@@ -98,7 +152,7 @@
 			  .attr('width', this.width)
 			  .attr('height', this.height);
 
-			this.projection = d3.geo.mercator()
+			this.projection = d3.geoMercator()
   							  .scale(4000)
  							  .center([-79.89096094,35.2112405])
   							  .translate([this.width / 2, this.height / 2]);
@@ -112,7 +166,7 @@
 			  .classed('map-layer', true)
 			  .attr('fill', '#fff')
 			  .attr('stroke', '#aaa');	
-			this.path = d3.geo.path()
+			this.path = d3.geoPath()
   						 .projection(this.projection);
 
 			d3.json(this.url, function(error, mapData) {
@@ -120,7 +174,8 @@
 			  //console.log(this.features)
               this.min_congres = Math.min.apply(null,this.features.map(function(a){ return a.properties.year})); 
               this.max_congres = Math.max.apply(null,this.features.map(function(a){ return a.properties.year})); 
-			  
+
+
 			  //console.log(this.min_congres, this.max_congres);
 
 			  this.maxval = this.max_congres;
@@ -134,8 +189,18 @@
 
 			}.bind(this));
 
-			
-		},
+        },
+        findBounds: function(collection){
+            bounds = collection.map(function(c){ return d3.geoBounds(c) }).filter(function(a){
+                return !(isNaN(a[0][0]) || isNaN(a[0][1]) || isNaN(a[1][0]) || isNaN(a[1][1]))  
+            })
+            lats = bounds.map(function(c){ return c[0][0]})
+            minLat = Math.min.apply(null,bounds.map(function(c){ return c[0][0]})) 
+            maxLat = Math.max.apply(null,bounds.map(function(c){ return c[1][0]})) 
+            minLon = Math.min.apply(null,bounds.map(function(c){ return c[0][1]})) 
+            maxLon = Math.max.apply(null,bounds.map(function(c){ return c[1][1]})) 
+            return [[minLat,minLon], [maxLat,maxLon]]
+        },
         opacityFunc: function(d){
             return this.turnoutRamp(d.properties.turnout)
         },
@@ -151,7 +216,8 @@
 			if(!this.features){
 				return;
 			}
-			var filteredFeatures = this.features.filter(function(a){return a.properties.year == this.val}.bind(this)) 
+
+		var filteredFeatures = this.features.filter(function(a){return a.properties.year == this.val}.bind(this)) 
 
 			var dist = filteredFeatures.filter(function(a){return a.properties.district == this.district}.bind(this))[0];
 			if(dist){
@@ -163,12 +229,27 @@
 			//console.log(filteredFeatures.length);
 			//console.log(this.mapLayer)
 			this.mapLayer.selectAll('path').remove()
+            if (this.zoomToDistrict){
+                this.projection = d3.geoMercator()
+                                    .fitExtent([[100,100],[this.width,this.height]],dist)
+
+            }
+            else{
+                bounds = this.findBounds(this.features)
+                center = [(bounds[0][0] + bounds[1][0])*0.5 ,(bounds[0][1]+ bounds[1][1])*0.5]
             
-            //Move selected region to top:
+                this.projection = d3.geoMercator()
+                          .scale(4000)
+                          .center(center)
+                          .translate([this.width / 2, this.height / 2]);
+            }
+            this.path = d3.geoPath()
+                     .projection(this.projection);
+                //Move selected region to top:
 
 			this.mapLayer.selectAll('path')
 				.data(filteredFeatures
-                .sort(function(a,b){ console.log(a); return (a.properties.district == this.district ? 1 : -1)}.bind(this)))
+                .sort(function(a,b){ return (a.properties.district == this.district ? 1 : -1)}.bind(this)))
 				.enter().append('path')
 				  .attr('d', this.path)
 				  .attr('vector-effect', 'non-scaling-stroke')
@@ -179,7 +260,6 @@
                   .style('fill-opacity', function(d){return this.opacityFunc(d)}.bind(this));
             this.mapLayer.selectAll('path')
                   .on('click', function(a){
-                      console.log('clicked :',a)
                       this.district= a.properties.district
                     }.bind(this))
 		}
