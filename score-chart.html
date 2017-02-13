@@ -115,11 +115,18 @@
 
             },
             stateLevel:function(){
+                console.log(this.metric)
                 stateData = this.data.filter(function(a){return  a.state_name==this.state});
-                stateMean = d3.mean(stateData, function(a){return a[this.currentMetric]});
-                stateDeviation = d3.mean(stateData, function(a){return a[this.currentMetric]});
-                
-
+                var years = Array.from(new Set( stateData.map(function(a){return a.properties.year})))
+                var data = years.map(function(y){
+                    var only_year = stateData.filter(function(b){return b.properties.year==y})
+                    var mean = d3.mean(only_year,function(a){return a.properties[this.metric]}.bind(this))
+                    //console.log('mean', mean)
+                    var std  = d3.deviation(only_year,function(a){return a.properties[this.metric]}.bind(this));
+                    return {year:y ,mean: mean, std:std}
+                }.bind(this));
+                data= data.sort(function(a,b){return a.year-b.year});
+                return data;
             },
             updateYear: function(){
                 if(this.yearBar){
@@ -133,7 +140,8 @@
                 }
 
 
-
+                var stateLevel = this.stateLevel()
+                
                 var districtData = this.data.filter(
                     function(a){ 
                         return a.properties.district==this.district
@@ -153,8 +161,48 @@
                               .curve(d3.curveBasis)
                               .x(function(d){return this.yearScale(d.properties.year)}.bind(this))
                               .y(function(d){return this.valScale(d.properties[this.metric])}.bind(this))
+                
+                this.stateMean = d3.line()
+                              .curve(d3.curveBasis)
+                              .x(function(d){return this.yearScale(d.year)}.bind(this))
+                              .y(function(d){return this.valScale(d.mean)}.bind(this))
+                
+                this.stateUpper = d3.line()
+                              .curve(d3.curveBasis)
+                              .x(function(d){return this.yearScale(d.year)}.bind(this))
+                              .y(function(d){return this.valScale(d.mean+d.std)}.bind(this))
+
+                this.stateLower = d3.line()
+                              .curve(d3.curveBasis)
+                              .x(function(d){return this.yearScale(d.year)}.bind(this))
+                              .y(function(d){return this.valScale(d.mean-d.std)}.bind(this))
 
                 this.g.selectAll(".districtLine").remove()
+                this.g.selectAll(".stateData").remove()
+
+                this.g.append("path")
+                    .attr('class','stateData')
+                    .datum(stateLevel)
+                    .attr("d", function(d){  return this.stateMean(d) }.bind(this))
+                    .style("stroke", "green")
+                    .style("fill", "transparent")
+                    
+                this.g.append("path")
+                    .attr('class','stateData')
+                    .datum(stateLevel)
+                    .attr("d", function(d){  return this.stateUpper(d) }.bind(this))
+                    .style("stroke", "green")
+                    .style("stroke-opacity",0.3)
+                    .style("fill", "transparent")
+
+                this.g.append("path")
+                    .attr('class','stateData')
+                    .datum(stateLevel)
+                    .attr("d", function(d){  return this.stateLower(d) }.bind(this))
+                    .style("stroke", "green")
+                    .style("stroke-opacity",0.3)
+                    .style("fill", "transparent")
+
                 this.g.append("path")
                     .attr('class','districtLine')
                     .datum(districtData)
